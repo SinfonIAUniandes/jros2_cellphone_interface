@@ -16,6 +16,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     buildTypes {
@@ -40,7 +44,7 @@ android {
 
     packaging {
         jniLibs {
-            useLegacyPackaging = true
+            useLegacyPackaging = false
         }
         resources {
             excludes += setOf(
@@ -73,6 +77,8 @@ dependencies {
     implementation("us.ihmc:log-tools:0.6.5")
 
     implementation("us.ihmc:jros2-android:1.1.6")
+    implementation("org.bytedeco:javacpp:1.5.11:android-arm64")
+    implementation("org.bytedeco:javacpp:1.5.11:android-x86_64")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
