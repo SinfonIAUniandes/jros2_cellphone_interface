@@ -44,13 +44,19 @@ import kotlinx.coroutines.launch
 import us.ihmc.jros2.ROS2Node
 import us.ihmc.jros2.ROS2Publisher
 import us.ihmc.jros2.ROS2Topic
+import us.ihmc.jros2.ROS2ServiceClient
+import example_interfaces.srv.AddTwoInts_Request
+import example_interfaces.srv.AddTwoInts_Response
 import std_msgs.String as RosString
+import kotlin.random.Random
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var multicastLock: WifiManager.MulticastLock
     private var rosNode: ROS2Node? = null
     private var publisher: ROS2Publisher<RosString>? = null
+    private var addTwoIntsClient: ROS2ServiceClient<AddTwoInts_Request, AddTwoInts_Response>? = null
+    private var addTwoIntsServer: us.ihmc.jros2.ROS2ServiceServer<AddTwoInts_Request, AddTwoInts_Response>? = null
 
     // UI State management
     private val mainScope = CoroutineScope(Dispatchers.Main + Job())
@@ -77,6 +83,7 @@ class MainActivity : ComponentActivity() {
     fun ChatterApp(modifier: Modifier = Modifier) {
         var isPublishing by remember { mutableStateOf(false) }
         var isSubscribing by remember { mutableStateOf(false) }
+        var isServing by remember { mutableStateOf(false) }
         val messages = remember { mutableStateListOf<String>() }
 
         // 2. Initialize ROS Node once when the Composable enters the screen
@@ -97,6 +104,13 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+
+                // Initialize Service Client
+                addTwoIntsClient = rosNode?.createServiceClient(
+                    "add_two_ints",
+                    AddTwoInts_Request::class.java,
+                    AddTwoInts_Response::class.java
+                )
             }
         }
 
@@ -118,6 +132,30 @@ class MainActivity : ComponentActivity() {
                 }
             } else {
                 publishJob?.cancel()
+            }
+        }
+
+        // 4. Handle Server Toggle
+        LaunchedEffect(isServing) {
+            ioScope.launch {
+                if (isServing) {
+                    addTwoIntsServer = rosNode?.createServiceServer(
+                        "add_two_ints",
+                        AddTwoInts_Request::class.java,
+                        AddTwoInts_Response::class.java
+                    ) { request, response ->
+                        response.sum = request.a + request.b
+                        mainScope.launch {
+                            messages.add(0, "SRV Handled -> ${request.a} + ${request.b} = ${response.sum}")
+                            if (messages.size > 50) messages.removeAt(messages.lastIndex)
+                        }
+                    }
+                } else {
+                    addTwoIntsServer?.let { server ->
+                        rosNode?.destroyServiceServer(server)
+                        addTwoIntsServer = null
+                    }
+                }
             }
         }
 
@@ -155,6 +193,69 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Text(if (isSubscribing) "Listening..." else "Start Listening")
                 }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Button(
+                    onClick = { isServing = !isServing },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isServing) Color(0xFFCE93D8) else MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text(if (isServing) "Stop Server" else "Start Server")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Service Client Button
+            Button(
+                onClick = {
+                    val client = addTwoIntsClient
+                    if (client != null) {
+                        ioScope.launch {
+                            val a = Random.nextLong(1, 100)
+                            val b = Random.nextLong(1, 100)
+                            
+                            mainScope.launch {
+                                messages.add(0, "REQ -> add_two_ints(a: $a, b: $b)")
+                            }
+
+                            val request = AddTwoInts_Request()
+                            request.a = a
+                            request.b = b
+
+                            try {
+                                // Wait up to 5 seconds for response
+                                val future = client.sendRequestAsync(request, 5000)
+                                // We are in IO coroutine, so we can block on future.get() or await if we had an extension
+                                val response = future.get()
+                                
+                                mainScope.launch {
+                                    if (response != null) {
+                                        messages.add(0, "REP <- Result: ${response.sum}")
+                                    } else {
+                                        messages.add(0, "REP <- Error: Timeout or failure")
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                mainScope.launch {
+                                    messages.add(0, "REP <- Error: ${e.message}")
+                                }
+                            }
+                        }
+                    } else {
+                        messages.add(0, "System: Service client not initialized yet.")
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Call add_two_ints Service")
             }
 
             Spacer(modifier = Modifier.height(24.dp))

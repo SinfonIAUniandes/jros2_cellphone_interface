@@ -76,11 +76,14 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation("us.ihmc:log-tools:0.6.5")
 
-    implementation("us.ihmc:jros2-android:1.1.6")
+    implementation("us.ihmc:jros2:1.1.6")
     implementation("org.bytedeco:javacpp:1.5.11:android-arm64")
     implementation("org.bytedeco:javacpp:1.5.11:android-x86_64")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    // Fix for XMLInputFactory not found on Android (Jackson XML / FastDDS Profiles)
+    implementation("javax.xml.stream:stax-api:1.0-2")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
