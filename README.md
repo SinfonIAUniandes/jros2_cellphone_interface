@@ -1,85 +1,119 @@
 # jros2 Cellphone Sensor Bridge
 
-Android (Jetpack Compose) application that exports phone sensor data to ROS 2 using standard `sensor_msgs` message types over the IHMC `jros2-android` stack (Fast DDS + JavaCPP JNI).
+Android (Jetpack Compose) application that exports live phone sensor telemetry to ROS 2 using standard `sensor_msgs` and `std_msgs` message types over the IHMC `jros2-android` stack (Fast DDS + JavaCPP JNI).
+
+---
+
+## Table of Contents
+1. [What This Project Does](#what-this-project-does)
+2. [Architecture & How It Works](#architecture--how-it-works)
+3. [Sensor Mapping & File Registry](#sensor-mapping--file-registry)
+4. [Project Directory Layout](#project-directory-layout)
+5. [Prerequisites & Build Instructions](#prerequisites--build-instructions)
+6. [Permissions Requirements](#permissions-requirements)
+7. [Step-by-Step Guide: Adding a New Sensor](#step-by-step-guide-adding-a-new-sensor)
+8. [Verification from ROS 2](#verification-from-ros-2)
+
+---
 
 ## What This Project Does
 
-- Creates an Android ROS 2 node (`phone_sensor_node`).
-- Publishes **7 hardware sensors** to standard ROS 2 topics.
-- Dark-themed sensor dashboard with per-sensor toggles and live readings.
-- Keeps DDS discovery working on Android Wi-Fi by acquiring a multicast lock.
+- Initializes a fully compliant ROS 2 Node (`phone_sensor_node`) directly on your physical Android smartphone.
+- Streams real-time, high-frequency telemetry from **7 hardware/software sensors** on the phone to external ROS 2 environments.
+- Features a premium, reactive, dark-themed sensor dashboard UI using Jetpack Compose.
+- Employs an Android multicast Wi-Fi lock to ensure robust, real-time discovery of DDS participants.
 
-## Published Topics
+---
 
-| Android Sensor | ROS 2 Topic | Message Type | Rate |
-|---|---|---|---|
-| Accelerometer + Gyroscope + Rotation Vector | `/phone/imu` | `sensor_msgs/Imu` | 50 Hz |
-| Magnetometer | `/phone/magnetic_field` | `sensor_msgs/MagneticField` | 10 Hz |
-| Barometer (Pressure) | `/phone/pressure` | `sensor_msgs/FluidPressure` | 5 Hz |
-| Ambient Light | `/phone/illuminance` | `sensor_msgs/Illuminance` | 5 Hz |
-| GPS Location | `/phone/gps` | `sensor_msgs/NavSatFix` | 1 Hz |
-| Proximity | `/phone/proximity` | `std_msgs/Float32` | 5 Hz |
-| Battery | `/phone/battery` | `sensor_msgs/BatteryState` | 0.2 Hz |
+## Architecture & How It Works
 
-## Architecture
+This project is built using a highly decoupled, modular architecture designed for high-performance and easy maintainability:
 
-### High-level Layers
+```
+                  ┌──────────────────────────────────────────────┐
+                  │                 MainActivity                 │
+                  │              (Jetpack Compose)               │
+                  └──────────────────────┬───────────────────────┘
+                                         │ Observes State & Toggles
+                                         ▼
+                  ┌──────────────────────────────────────────────┐
+                  │                 SensorBridge                 │
+                  │             (Central Coordinator)            │
+                  └──────────────────────┬───────────────────────┘
+                                         │ Manages Lifecycle
+                                         ▼
+                 ┌────────────────────────────────────────────────┐
+                 │          List<PhoneSensor> Interfaces          │
+                 │   (Imu, Magnetometer, Battery, GPS, etc.)      │
+                 └───────────────────────┬────────────────────────┘
+                                         │ Fills & Publishes Messages
+                                         ▼
+                  ┌──────────────────────────────────────────────┐
+                  │            us.ihmc:jros2-android             │
+                  │             (DDS Native Layer)               │
+                  └──────────────────────────────────────────────┘
+```
 
-1. **UI Layer** (Compose)
-   - `MainActivity` hosts the sensor dashboard with a master start/stop toggle.
-   - Individual sensor cards show name, latest value, message count, and enable/disable switch.
-   - Log console at bottom shows bridge status messages.
+1. **The Core Interface (`PhoneSensor.kt`)**: 
+   Every sensor in the application is a self-contained module that implements the `PhoneSensor` interface. This class defines the metadata (UI color, icon, name, topic name) as well as the lifecycle hooks (`start` and `stop`), and exposes local UI state flow flows (`enabled`, `messageCount`, `displayValue`).
+   
+2. **The Coordinator (`SensorBridge.kt`)**: 
+   A central registry that instantiates the ROS 2 node, retains the list of active `PhoneSensor` implementations, and delegates startup/shutdown events to each individual sensor. It also exposes diagnostic logs to the UI.
 
-2. **Sensor Bridge Layer** (`SensorBridge.kt`)
-   - Central coordinator that owns the `ROS2Node` and all 7 publishers.
-   - Registers Android `SensorEventListener`s for IMU, magnetometer, barometer, light, and proximity.
-   - Uses `LocationManager` for GPS and `BatteryManager` for battery state.
-   - Throttles each sensor to its configured publish rate.
-   - Fills ROS 2 messages with proper headers (timestamp, frame_id) and publishes.
-   - Exposes observable `StateFlow` for the UI to display live values.
+3. **Dynamic UI Rendering (`MainActivity.kt`)**: 
+   Instead of hardcoded panels, the Compose UI reads the list of sensors from `SensorBridge` and dynamically generates elegant, individual sensor toggle cards using a `LazyVerticalGrid`. Any new sensor added to the registry is automatically drawn in the UI.
 
-3. **ROS 2 / JNI Layer**
-   - `jros2-android` provides JavaCPP bindings (`fastddsjava`) and native libs:
-     - `libjnifastddsjava.so`
-     - `libfastdds.so`
-     - `libfastcdr.so`
+4. **Native Bindings Layer (`jros2-android`)**: 
+   Interfaces with Fast DDS through native `.so` shared objects compiled via Android NDK/CMake.
 
-4. **Network Layer**
-   - DDS discovery and traffic over Wi-Fi/UDP.
-   - Android multicast lock is required for discovery reliability.
+---
 
-### Unit Conversions
+## Sensor Mapping & File Registry
 
-| Sensor | Android Unit | ROS 2 Unit | Conversion |
-|---|---|---|---|
-| Magnetometer | µT | Tesla | × 10⁻⁶ |
-| Barometer | hPa | Pascal | × 100 |
-| Battery Voltage | mV | V | ÷ 1000 |
-| Battery Temperature | 0.1°C | °C | ÷ 10 |
+The following table documents each supported sensor, its default topic name, its message definition, target publish rate, and the exact `.kt` file where the logic resides:
 
-## Repository Layout
+| Sensor Type | ROS 2 Topic Name | Message Type | Target Rate | Implementing File Path |
+| :--- | :--- | :--- | :--- | :--- |
+| **IMU** | `/phone/imu` | `sensor_msgs/Imu` | 50 Hz | `ImuSensor.kt` |
+| **Magnetometer** | `/phone/magnetic_field` | `sensor_msgs/MagneticField` | 10 Hz | `MagnetometerSensor.kt` |
+| **Barometer** | `/phone/pressure` | `sensor_msgs/FluidPressure` | 5 Hz | `PressureSensor.kt` |
+| **Ambient Light** | `/phone/illuminance` | `sensor_msgs/Illuminance` | 5 Hz | `LightSensor.kt` |
+| **GPS Fix** | `/phone/gps` | `sensor_msgs/NavSatFix` | 1 Hz | `GpsSensor.kt` |
+| **Proximity** | `/phone/proximity` | `std_msgs/Float32` | 5 Hz | `ProximitySensor.kt` |
+| **Battery State** | `/phone/battery` | `sensor_msgs/BatteryState` | 0.2 Hz | `BatterySensor.kt` |
+
+---
+
+## Project Directory Layout
 
 ```text
 jros2_cellphone_interface/
-  app/
-    src/main/java/com/jros2/cellphone_interface/
-      MainActivity.kt         # Compose UI dashboard
-      SensorBridge.kt          # Sensor ↔ ROS 2 bridge
-      ui/theme/                # Dark color scheme
-    src/main/AndroidManifest.xml
-    build.gradle.kts
-  build.gradle.kts
-  settings.gradle.kts
-  gradle.properties
+├── app/
+│   ├── src/main/
+│   │   ├── java/com/jros2/cellphone_interface/
+│   │   │   ├── MainActivity.kt         # Entry Activity and main Jetpack Compose UI
+│   │   │   ├── SensorBridge.kt         # Central coordinator managing the ROS 2 lifecycle
+│   │   │   ├── ui/theme/
+│   │   │   │   ├── Color.kt            # Palette specifying gorgeous dark UI tones
+│   │   │   │   └── Theme.kt            # Sets up the custom dark color themes
+│   │   │   └── sensors/
+│   │   │       ├── PhoneSensor.kt      # General interface all sensors must implement
+│   │   │       ├── ImuSensor.kt        # Combines accelerometer, gyro & rot vector
+│   │   │       ├── MagnetometerSensor.kt# Streams raw magnetic values
+│   │   │       ├── PressureSensor.kt   # Barometric pressure to FluidPressure
+│   │   │       ├── LightSensor.kt      # Illuminance measurements in Lux
+│   │   │       ├── GpsSensor.kt        # Location coordinate calculations
+│   │   │       ├── ProximitySensor.kt  # Proximity threshold alerts
+│   │   │       └── BatterySensor.kt    # Polling updates for battery charge & voltage
+│   │   └── AndroidManifest.xml         # Hardware uses-permissions specifications
+│   └── build.gradle.kts                # Application dependencies config
+├── build.gradle.kts
+└── settings.gradle.kts
 ```
 
-## Prerequisites
+---
 
-- JDK 17 (required by AGP/Gradle in this project).
-- Android SDK platform used by this app (`compileSdk = 36`, `minSdk = 33`).
-- Local sibling checkout of `jros2` (same parent workspace).
-
-## Build Instructions
+## Prerequisites & Build Instructions
 
 This application relies heavily on the `us.ihmc:jros2-android` AAR dependency, which provides the Fast-DDS native JNI libraries. 
 
@@ -105,63 +139,129 @@ cd ..\jros2_cellphone_interface
 .\gradlew clean assembleDebug
 ```
 
-### 3) Install on Phone
-
-Locate the generated APK and push it to your Android device via ADB:
-
+### 3) Install via ADB
+Push the built binary to your connected physical Android device:
 ```powershell
 adb install -r app\build\outputs\apk\debug\app-debug.apk
 ```
 
-## Permissions
+---
 
-The app requests the following permissions:
+## Permissions Requirements
 
-| Permission | Purpose |
-|---|---|
-| `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE` | DDS/ROS 2 networking |
-| `CHANGE_WIFI_MULTICAST_STATE` | DDS discovery over Wi-Fi |
-| `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` | GPS sensor data |
-| `HIGH_SAMPLING_RATE_SENSORS` | IMU at high frequency (Android 12+) |
+The following permissions are registered inside [`AndroidManifest.xml`](file:///c:/Users/David.DESKTOP-A6NC9IE/Desktop/Cuevas/WearROS2/jros2_cellphone_interface/app/src/main/AndroidManifest.xml) and handled automatically:
+*   `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`: Standard DDS local communication over UDP.
+*   `CHANGE_WIFI_MULTICAST_STATE`: Enables Wi-Fi Multicast lock required by Fast DDS for network discovery.
+*   `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`: Required for GPS coordinate retrieval.
+*   `HIGH_SAMPLING_RATE_SENSORS`: Enables high-frequency (>20Hz) sensor updates on Android 12+.
+
+---
+
+## Step-by-Step Guide: Adding a New Sensor
+
+Thanks to the decoupled design, adding a brand new sensor takes only two steps:
+
+### Step 1: Create your Sensor Class
+Create a new file in the `sensors/` directory (e.g., `AmbientTempSensor.kt`) that implements the `PhoneSensor` interface.
+
+Here is a minimalist template for an ambient temperature sensor:
+```kotlin
+package com.jros2.cellphone_interface.sensors
+
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import us.ihmc.jros2.ROS2Node
+import us.ihmc.jros2.ROS2Publisher
+import us.ihmc.jros2.ROS2Topic
+import std_msgs.Float32 // Or your choice of ROS 2 message definition
+
+class AmbientTempSensor : PhoneSensor {
+    override val id = "temperature"
+    override val name = "Temperature"
+    override val icon = "🌡️"
+    override val color = Color(0xFFFF5722) // Choose a distinctive color
+    override val topicName = "/phone/ambient_temp"
+
+    override val enabled = MutableStateFlow(true)
+    private val _count = MutableStateFlow(0L)
+    override val messageCount: StateFlow<Long> = _count
+    private val _value = MutableStateFlow("0.0 °C")
+    override val displayValue: StateFlow<String> = _value
+
+    private val msg = Float32()
+    private var publisher: ROS2Publisher<Float32>? = null
+    private var sensorManager: SensorManager? = null
+
+    private val listener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            if (!enabled.value) return
+            
+            // Populate and publish the ROS 2 Message
+            msg.setData(event.values[0])
+            publisher?.publish(msg)
+
+            // Update local state flows
+            _count.value++
+            _value.value = "%.1f °C".format(event.values[0])
+        }
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
+
+    override fun start(node: ROS2Node, context: Context) {
+        publisher = node.createPublisher(ROS2Topic(topicName, Float32::class.java))
+        sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        sensorManager?.getDefaultSensor(Sensor.TYPE_AMBIENT_TEMPERATURE)?.let {
+            sensorManager?.registerListener(listener, it, SensorManager.SENSOR_DELAY_NORMAL)
+        }
+    }
+
+    override fun stop() {
+        sensorManager?.unregisterListener(listener)
+        publisher = null
+    }
+}
+```
+
+### Step 2: Register it in the Central Registry
+Open [`SensorBridge.kt`](file:///c:/Users/David.DESKTOP-A6NC9IE/Desktop/Cuevas/WearROS2/jros2_cellphone_interface/app/src/main/java/com/jros2/cellphone_interface/SensorBridge.kt) and instantiate your sensor inside the `sensors` list:
+
+```kotlin
+val sensors = listOf(
+    ImuSensor(),
+    MagnetometerSensor(),
+    PressureSensor(),
+    LightSensor(),
+    GpsSensor(),
+    ProximitySensor(),
+    BatterySensor(),
+    AmbientTempSensor() // Just append it here!
+)
+```
+
+The system will **automatically initialize the publishers**, register listeners, and **create a gorgeous new card in your Compose dashboard grid!**
+
+---
 
 ## Verification from ROS 2
 
-Once the app is running with sensors enabled, verify from any ROS 2 machine on the same network:
+Once your app is compiled, running, and the bridge is active (LIVE status), verify it from a machine on the same Wi-Fi subnet with:
 
 ```bash
-# List all published topics
+# Verify your machine discovers the smartphone node topics
 ros2 topic list
 
-# Expected output includes:
-#   /phone/imu
-#   /phone/magnetic_field
-#   /phone/pressure
-#   /phone/illuminance
-#   /phone/gps
-#   /phone/proximity
-#   /phone/battery
-
-# Echo live IMU data
+# Observe live IMU stream updates
 ros2 topic echo /phone/imu
 
-# Check publish rate
+# Check frequency rate (should be close to ~50 Hz)
 ros2 topic hz /phone/imu
-# Expected: average rate ~50 Hz
 
-# Echo GPS
+# Inspect GPS status
 ros2 topic echo /phone/gps
-
-# Check battery
-ros2 topic echo /phone/battery
 ```
-
-## Main Dependencies
-
-- AndroidX + Compose Material3
-- Kotlin Coroutines Android
-- `us.ihmc:jros2-android:1.1.6`
-- `us.ihmc:log-tools:0.6.5`
-
-## License / Upstream
-
-`jros2` and related native wrappers come from IHMC ecosystem components. Check upstream `jros2` repository licensing and notices for distribution/compliance details.

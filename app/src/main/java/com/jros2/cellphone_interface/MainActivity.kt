@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,7 +32,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
+import com.jros2.cellphone_interface.sensors.PhoneSensor
 import com.jros2.cellphone_interface.ui.theme.*
 
 class MainActivity : ComponentActivity() {
@@ -42,24 +47,17 @@ class MainActivity : ComponentActivity() {
     private val locationPermissionRequest = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
-        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
-        if (fineGranted || coarseGranted) {
-            // GPS will auto-register when bridge starts
-        }
+        // GPS will auto-register if granted
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // DDS Discovery over Wi-Fi
         enableRosDiscovery()
-
-        // Request location permissions
         requestLocationPermissions()
 
-        // Create sensor bridge
+        val settingsManager = SettingsManager(this)
         sensorBridge = SensorBridge(this)
 
         setContent {
@@ -68,7 +66,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = DarkBackground
                 ) {
-                    SensorDashboard(sensorBridge)
+                    SensorDashboard(sensorBridge, settingsManager)
                 }
             }
         }
@@ -108,8 +106,10 @@ class MainActivity : ComponentActivity() {
 // ── Dashboard Composable ─────────────────────────────────────────────
 
 @Composable
-fun SensorDashboard(bridge: SensorBridge) {
-    val state by bridge.state.collectAsState()
+fun SensorDashboard(bridge: SensorBridge, settingsManager: SettingsManager) {
+    val isRunning by bridge.isRunning.collectAsState()
+    val logs by bridge.logMessages.collectAsState()
+    var showSettings by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -117,14 +117,14 @@ fun SensorDashboard(bridge: SensorBridge) {
             .padding(top = 48.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)
     ) {
         // ── Header ───────────────────────────────────────────────────
-        HeaderSection(state)
+        HeaderSection(isRunning, onSettingsClick = { showSettings = true })
 
         Spacer(modifier = Modifier.height(16.dp))
 
         // ── Master Toggle ────────────────────────────────────────────
         MasterToggle(
-            isRunning = state.isRunning,
-            onToggle = { if (state.isRunning) bridge.stop() else bridge.start() }
+            isRunning = isRunning,
+            onToggle = { if (isRunning) bridge.stop() else bridge.start() }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -136,96 +136,8 @@ fun SensorDashboard(bridge: SensorBridge) {
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            item {
-                SensorCard(
-                    name = "IMU",
-                    icon = "🔄",
-                    color = ImuColor,
-                    enabled = state.imuEnabled,
-                    isRunning = state.isRunning,
-                    count = state.imuCount,
-                    value = "ax=%.1f ay=%.1f az=%.1f".format(
-                        state.imuAccel[0], state.imuAccel[1], state.imuAccel[2]
-                    ),
-                    onToggle = { bridge.toggleSensor("imu", it) }
-                )
-            }
-            item {
-                SensorCard(
-                    name = "Magnetometer",
-                    icon = "🧭",
-                    color = MagColor,
-                    enabled = state.magEnabled,
-                    isRunning = state.isRunning,
-                    count = state.magCount,
-                    value = "x=%.1f y=%.1f z=%.1f µT".format(
-                        state.magValues[0], state.magValues[1], state.magValues[2]
-                    ),
-                    onToggle = { bridge.toggleSensor("mag", it) }
-                )
-            }
-            item {
-                SensorCard(
-                    name = "Barometer",
-                    icon = "🌡",
-                    color = PressureColor,
-                    enabled = state.pressureEnabled,
-                    isRunning = state.isRunning,
-                    count = state.pressureCount,
-                    value = "%.1f hPa".format(state.pressureValue),
-                    onToggle = { bridge.toggleSensor("pressure", it) }
-                )
-            }
-            item {
-                SensorCard(
-                    name = "Light",
-                    icon = "💡",
-                    color = LightColor,
-                    enabled = state.lightEnabled,
-                    isRunning = state.isRunning,
-                    count = state.lightCount,
-                    value = "%.0f lux".format(state.lightValue),
-                    onToggle = { bridge.toggleSensor("light", it) }
-                )
-            }
-            item {
-                SensorCard(
-                    name = "GPS",
-                    icon = "📍",
-                    color = GpsColor,
-                    enabled = state.gpsEnabled,
-                    isRunning = state.isRunning,
-                    count = state.gpsCount,
-                    value = if (state.gpsCount > 0)
-                        "%.5f°, %.5f°".format(state.gpsLat, state.gpsLon)
-                    else "Waiting for fix...",
-                    onToggle = { bridge.toggleSensor("gps", it) }
-                )
-            }
-            item {
-                SensorCard(
-                    name = "Proximity",
-                    icon = "📏",
-                    color = ProximityColor,
-                    enabled = state.proximityEnabled,
-                    isRunning = state.isRunning,
-                    count = state.proximityCount,
-                    value = "%.1f cm".format(state.proximityValue),
-                    onToggle = { bridge.toggleSensor("proximity", it) }
-                )
-            }
-            item {
-                SensorCard(
-                    name = "Battery",
-                    icon = if (state.batteryCharging) "🔌" else "🔋",
-                    color = BatteryColor,
-                    enabled = state.batteryEnabled,
-                    isRunning = state.isRunning,
-                    count = state.batteryCount,
-                    value = "%.0f%%".format(state.batteryPercent) +
-                            if (state.batteryCharging) " ⚡" else "",
-                    onToggle = { bridge.toggleSensor("battery", it) }
-                )
+            items(bridge.sensors, key = { it.id }) { sensor ->
+                SensorCardItem(sensor, isRunning)
             }
         }
 
@@ -233,30 +145,140 @@ fun SensorDashboard(bridge: SensorBridge) {
 
         // ── Log Console ──────────────────────────────────────────────
         LogConsole(
-            messages = state.logMessages,
+            messages = logs,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(120.dp)
         )
+    }
+
+    if (showSettings) {
+        SettingsDialog(
+            settingsManager = settingsManager,
+            sensors = bridge.sensors,
+            onDismiss = { showSettings = false },
+            onSave = {
+                // If running, we must stop it so settings apply on next start
+                if (bridge.isRunning.value) {
+                    bridge.stop()
+                }
+                showSettings = false
+            }
+        )
+    }
+}
+
+@Composable
+fun SensorCardItem(sensor: PhoneSensor, isRunning: Boolean) {
+    val enabled by sensor.enabled.collectAsState()
+    val value by sensor.displayValue.collectAsState()
+    val count by sensor.messageCount.collectAsState()
+
+    val borderColor by animateColorAsState(
+        when {
+            isRunning && enabled -> sensor.color.copy(alpha = 0.6f)
+            else -> DarkCardBorder
+        },
+        label = "border"
+    )
+    val cardBg by animateColorAsState(
+        when {
+            isRunning && enabled -> sensor.color.copy(alpha = 0.06f)
+            else -> DarkCard
+        },
+        label = "cardBg"
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(140.dp)
+            .border(1.dp, borderColor, RoundedCornerShape(12.dp)),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = sensor.icon, fontSize = 18.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = sensor.name,
+                        color = if (enabled) sensor.color else TextMuted,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = { sensor.enabled.value = it },
+                    modifier = Modifier.height(20.dp),
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = sensor.color.copy(alpha = 0.4f),
+                        checkedThumbColor = sensor.color,
+                        uncheckedTrackColor = TextMuted.copy(alpha = 0.3f),
+                        uncheckedThumbColor = TextMuted
+                    )
+                )
+            }
+
+            Text(
+                text = value,
+                color = if (enabled && isRunning) TextPrimary else TextMuted,
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+
+            if (isRunning && enabled) {
+                Text(
+                    text = "$count msgs",
+                    color = TextSecondary,
+                    fontSize = 10.sp
+                )
+            }
+        }
     }
 }
 
 // ── Header ───────────────────────────────────────────────────────────
 
 @Composable
-fun HeaderSection(state: SensorBridge.SensorState) {
+fun HeaderSection(isRunning: Boolean, onSettingsClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column {
-            Text(
-                text = "ROS 2 Sensor Bridge",
-                color = TextPrimary,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "ROS 2 Sensor Bridge",
+                    color = TextPrimary,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(
+                    onClick = onSettingsClick,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Text(text = "⚙️", fontSize = 18.sp)
+                }
+            }
             Text(
                 text = "Phone → /phone/* topics",
                 color = TextSecondary,
@@ -264,9 +286,8 @@ fun HeaderSection(state: SensorBridge.SensorState) {
             )
         }
 
-        // Status pill
         val statusColor by animateColorAsState(
-            if (state.isRunning) GreenActive else TextMuted,
+            if (isRunning) GreenActive else TextMuted,
             label = "statusColor"
         )
         Row(
@@ -278,7 +299,6 @@ fun HeaderSection(state: SensorBridge.SensorState) {
                 )
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
-            // Pulsing dot
             val pulseAlpha by rememberInfiniteTransition(label = "pulse").animateFloat(
                 initialValue = 0.4f,
                 targetValue = 1f,
@@ -292,47 +312,17 @@ fun HeaderSection(state: SensorBridge.SensorState) {
                 modifier = Modifier
                     .size(8.dp)
                     .clip(CircleShape)
-                    .background(statusColor.copy(alpha = if (state.isRunning) pulseAlpha else 1f))
+                    .background(statusColor.copy(alpha = if (isRunning) pulseAlpha else 1f))
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = if (state.isRunning) "LIVE" else "OFF",
+                text = if (isRunning) "LIVE" else "OFF",
                 color = statusColor,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold
             )
         }
     }
-
-    // Stats bar
-    if (state.isRunning) {
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(DarkCard, RoundedCornerShape(8.dp))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            StatChip(label = "Total msgs", value = formatCount(state.totalCount))
-            StatChip(label = "IMU msgs", value = formatCount(state.imuCount))
-            StatChip(label = "GPS fixes", value = formatCount(state.gpsCount))
-        }
-    }
-}
-
-@Composable
-fun StatChip(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text = value, color = CyanAccent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        Text(text = label, color = TextMuted, fontSize = 10.sp)
-    }
-}
-
-fun formatCount(count: Long): String = when {
-    count >= 1_000_000 -> "%.1fM".format(count / 1_000_000.0)
-    count >= 1_000 -> "%.1fK".format(count / 1_000.0)
-    else -> count.toString()
 }
 
 // ── Master Toggle ────────────────────────────────────────────────────
@@ -358,102 +348,6 @@ fun MasterToggle(isRunning: Boolean, onToggle: () -> Unit) {
             fontWeight = FontWeight.Bold,
             color = Color.Black
         )
-    }
-}
-
-// ── Sensor Card ──────────────────────────────────────────────────────
-
-@Composable
-fun SensorCard(
-    name: String,
-    icon: String,
-    color: Color,
-    enabled: Boolean,
-    isRunning: Boolean,
-    count: Long,
-    value: String,
-    onToggle: (Boolean) -> Unit
-) {
-    val borderColor by animateColorAsState(
-        when {
-            isRunning && enabled -> color.copy(alpha = 0.6f)
-            else -> DarkCardBorder
-        },
-        label = "border"
-    )
-    val cardBg by animateColorAsState(
-        when {
-            isRunning && enabled -> color.copy(alpha = 0.06f)
-            else -> DarkCard
-        },
-        label = "cardBg"
-    )
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(140.dp)
-            .border(1.dp, borderColor, RoundedCornerShape(12.dp)),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBg)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Top row: icon + name + toggle
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = icon, fontSize = 18.sp)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = name,
-                        color = if (enabled) color else TextMuted,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = onToggle,
-                    modifier = Modifier.height(20.dp),
-                    colors = SwitchDefaults.colors(
-                        checkedTrackColor = color.copy(alpha = 0.4f),
-                        checkedThumbColor = color,
-                        uncheckedTrackColor = TextMuted.copy(alpha = 0.3f),
-                        uncheckedThumbColor = TextMuted
-                    )
-                )
-            }
-
-            // Value
-            Text(
-                text = value,
-                color = if (enabled && isRunning) TextPrimary else TextMuted,
-                fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(vertical = 4.dp)
-            )
-
-            // Message count
-            if (isRunning && enabled) {
-                Text(
-                    text = "$count msgs",
-                    color = TextSecondary,
-                    fontSize = 10.sp
-                )
-            }
-        }
     }
 }
 
@@ -493,6 +387,129 @@ fun LogConsole(messages: List<String>, modifier: Modifier = Modifier) {
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                }
+            }
+        }
+    }
+}
+
+// ── Settings Dialog ──────────────────────────────────────────────────
+
+@Composable
+fun SettingsDialog(
+    settingsManager: SettingsManager,
+    sensors: List<PhoneSensor>,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit
+) {
+    var domainId by remember { mutableStateOf(settingsManager.domainId.toString()) }
+    var namespace by remember { mutableStateOf(settingsManager.namespace) }
+    val topicNames = remember {
+        mutableStateMapOf<String, String>().apply {
+            sensors.forEach { sensor ->
+                this[sensor.id] = settingsManager.getTopicName(sensor.id, sensor.topicName)
+            }
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = DarkCard),
+            modifier = Modifier.fillMaxWidth().padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                Text(
+                    text = "ROS 2 Settings",
+                    color = TextPrimary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+                    item {
+                        OutlinedTextField(
+                            value = domainId,
+                            onValueChange = { domainId = it },
+                            label = { Text("ROS_DOMAIN_ID") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedBorderColor = CyanAccent,
+                                unfocusedBorderColor = DarkCardBorder
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = namespace,
+                            onValueChange = { namespace = it },
+                            label = { Text("Node Namespace") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedBorderColor = CyanAccent,
+                                unfocusedBorderColor = DarkCardBorder
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Sensor Topics",
+                            color = TextSecondary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    items(sensors) { sensor ->
+                        OutlinedTextField(
+                            value = topicNames[sensor.id] ?: "",
+                            onValueChange = { topicNames[sensor.id] = it },
+                            label = { Text(sensor.name) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedBorderColor = sensor.color,
+                                unfocusedBorderColor = DarkCardBorder
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel", color = TextMuted)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            settingsManager.domainId = domainId.toIntOrNull() ?: 0
+                            settingsManager.namespace = namespace
+                            topicNames.forEach { (id, name) ->
+                                settingsManager.setTopicName(id, name)
+                            }
+                            onSave()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = CyanAccent)
+                    ) {
+                        Text("Save & Apply", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
