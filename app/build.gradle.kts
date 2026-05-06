@@ -76,7 +76,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation("us.ihmc:log-tools:0.6.5")
 
-    implementation("us.ihmc:jros2:1.1.6")
+    implementation("us.ihmc:jros2-android:1.1.6")
     implementation("org.bytedeco:javacpp:1.5.11:android-arm64")
     implementation("org.bytedeco:javacpp:1.5.11:android-x86_64")
 
