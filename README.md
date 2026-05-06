@@ -1,61 +1,71 @@
-# jros2 Cellphone Interface
+# jros2 Cellphone Sensor Bridge
 
-Android (Jetpack Compose) application that publishes and subscribes to ROS 2 topics from a real phone using the IHMC `jros2-android` stack (Fast DDS + JavaCPP JNI).
+Android (Jetpack Compose) application that exports phone sensor data to ROS 2 using standard `sensor_msgs` message types over the IHMC `jros2-android` stack (Fast DDS + JavaCPP JNI).
 
 ## What This Project Does
 
-- Creates an Android ROS 2 node (`android_chatter_node`).
-- Publishes messages to `/chatter` at 1 Hz.
-- Subscribes to `/chatter` and shows received messages in-app.
-- Uses a Compose UI with independent Start/Stop toggles for publisher and listener.
+- Creates an Android ROS 2 node (`phone_sensor_node`).
+- Publishes **7 hardware sensors** to standard ROS 2 topics.
+- Dark-themed sensor dashboard with per-sensor toggles and live readings.
 - Keeps DDS discovery working on Android Wi-Fi by acquiring a multicast lock.
+
+## Published Topics
+
+| Android Sensor | ROS 2 Topic | Message Type | Rate |
+|---|---|---|---|
+| Accelerometer + Gyroscope + Rotation Vector | `/phone/imu` | `sensor_msgs/Imu` | 50 Hz |
+| Magnetometer | `/phone/magnetic_field` | `sensor_msgs/MagneticField` | 10 Hz |
+| Barometer (Pressure) | `/phone/pressure` | `sensor_msgs/FluidPressure` | 5 Hz |
+| Ambient Light | `/phone/illuminance` | `sensor_msgs/Illuminance` | 5 Hz |
+| GPS Location | `/phone/gps` | `sensor_msgs/NavSatFix` | 1 Hz |
+| Proximity | `/phone/proximity` | `std_msgs/Float32` | 5 Hz |
+| Battery | `/phone/battery` | `sensor_msgs/BatteryState` | 0.2 Hz |
 
 ## Architecture
 
 ### High-level Layers
 
-1. UI Layer (Compose)
-- `MainActivity` hosts the app screen and button-driven state (`isPublishing`, `isSubscribing`).
-- Received and sent messages are shown in a scrolling console.
+1. **UI Layer** (Compose)
+   - `MainActivity` hosts the sensor dashboard with a master start/stop toggle.
+   - Individual sensor cards show name, latest value, message count, and enable/disable switch.
+   - Log console at bottom shows bridge status messages.
 
-2. Application/Concurrency Layer
-- Main thread scope updates UI state.
-- IO scope runs ROS 2 work (node creation, publish loop, subscription callbacks).
-- Publisher loop sends one message per second while enabled.
+2. **Sensor Bridge Layer** (`SensorBridge.kt`)
+   - Central coordinator that owns the `ROS2Node` and all 7 publishers.
+   - Registers Android `SensorEventListener`s for IMU, magnetometer, barometer, light, and proximity.
+   - Uses `LocationManager` for GPS and `BatteryManager` for battery state.
+   - Throttles each sensor to its configured publish rate.
+   - Fills ROS 2 messages with proper headers (timestamp, frame_id) and publishes.
+   - Exposes observable `StateFlow` for the UI to display live values.
 
-3. ROS 2 Integration Layer
-- `ROS2Node` manages participant/session lifecycle.
-- `ROS2Publisher<std_msgs/String>` sends chatter messages.
-- `ROS2Subscription<std_msgs/String>` receives messages.
+3. **ROS 2 / JNI Layer**
+   - `jros2-android` provides JavaCPP bindings (`fastddsjava`) and native libs:
+     - `libjnifastddsjava.so`
+     - `libfastdds.so`
+     - `libfastcdr.so`
 
-4. Native/JNI Layer
-- `jros2-android` provides JavaCPP bindings (`fastddsjava`) and native libs:
-  - `libjnifastddsjava.so`
-  - `libfastdds.so`
-  - `libfastcdr.so`
+4. **Network Layer**
+   - DDS discovery and traffic over Wi-Fi/UDP.
+   - Android multicast lock is required for discovery reliability.
 
-5. Network Layer
-- DDS discovery and traffic over Wi-Fi/UDP.
-- Android multicast lock is required for discovery reliability.
+### Unit Conversions
 
-### Runtime Flow
-
-- App start:
-  - Acquire Wi-Fi multicast lock.
-  - Create ROS 2 node and `/chatter` publisher/subscriber.
-- Publish toggle ON:
-  - Background coroutine publishes `"Hello from Android: N"` every second.
-- Subscribe toggle ON:
-  - Incoming samples are read from ROS 2 callback path and appended to UI list.
-- App stop/destroy:
-  - Cancel coroutines, close node, release multicast lock.
+| Sensor | Android Unit | ROS 2 Unit | Conversion |
+|---|---|---|---|
+| Magnetometer | µT | Tesla | × 10⁻⁶ |
+| Barometer | hPa | Pascal | × 100 |
+| Battery Voltage | mV | V | ÷ 1000 |
+| Battery Temperature | 0.1°C | °C | ÷ 10 |
 
 ## Repository Layout
 
 ```text
 jros2_cellphone_interface/
   app/
-    src/main/java/com/jros2/cellphone_interface/MainActivity.kt
+    src/main/java/com/jros2/cellphone_interface/
+      MainActivity.kt         # Compose UI dashboard
+      SensorBridge.kt          # Sensor ↔ ROS 2 bridge
+      ui/theme/                # Dark color scheme
     src/main/AndroidManifest.xml
     build.gradle.kts
   build.gradle.kts
@@ -103,82 +113,47 @@ Locate the generated APK and push it to your Android device via ADB:
 adb install -r app\build\outputs\apk\debug\app-debug.apk
 ```
 
-## Issues We Hit and How They Were Fixed
+## Permissions
 
-This section documents the real problems encountered while bringing ARM64 phone support online.
+The app requests the following permissions:
 
-### 1) Gradle/AGP Java mismatch
+| Permission | Purpose |
+|---|---|
+| `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE` | DDS/ROS 2 networking |
+| `CHANGE_WIFI_MULTICAST_STATE` | DDS discovery over Wi-Fi |
+| `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` | GPS sensor data |
+| `HIGH_SAMPLING_RATE_SENSORS` | IMU at high frequency (Android 12+) |
 
-Symptom:
-- Build/publish failed with message equivalent to: "Gradle requires JVM 17 or later", while environment used Java 15.
+## Verification from ROS 2
 
-Fix:
-- Forced Gradle to use Android Studio JBR 17 via:
-  - `gradle.properties` (`org.gradle.java.home=...`) and/or `JAVA_HOME` in shell.
+Once the app is running with sensors enabled, verify from any ROS 2 machine on the same network:
 
-### 2) App was not consuming the newly patched Android artifact
+```bash
+# List all published topics
+ros2 topic list
 
-Symptom:
-- Runtime behavior did not change after code fixes in `jros2`.
+# Expected output includes:
+#   /phone/imu
+#   /phone/magnetic_field
+#   /phone/pressure
+#   /phone/illuminance
+#   /phone/gps
+#   /phone/proximity
+#   /phone/battery
 
-Root cause:
-- Publishing root `jros2` does not automatically guarantee updated `jros2-android` AAR content.
+# Echo live IMU data
+ros2 topic echo /phone/imu
 
-Fix:
-- Published from `jros2/android` using `publishReleasePublicationToMavenLocal`.
-- Kept `mavenLocal()` enabled in this app (`settings.gradle.kts`).
+# Check publish rate
+ros2 topic hz /phone/imu
+# Expected: average rate ~50 Hz
 
-### 3) ARM64 `UnsatisfiedLinkError` for Fast DDS JNI symbols
+# Echo GPS
+ros2 topic echo /phone/gps
 
-Symptoms on real phone:
-- Missing implementations such as:
-  - `fastddsjava_datareader_read_next_sample(...)`
-  - `fastddsjava_sampleinfo_valid_data(...)`
-
-Root cause:
-- ARM64 native JNI library lacked some symbols available on x86_64 builds.
-
-Fixes applied in `jros2` Java layer:
-- In `ROS2Subscription`:
-  - Fallback from `read_next_sample` to `read_next_custom` on `UnsatisfiedLinkError`.
-  - Fallback for `sampleinfo_valid_data` check (assume valid when method missing).
-  - Fallback timestamp collection to `System.currentTimeMillis()` if sampleinfo timestamp JNI methods are missing.
-- In `fastddsjava.java`:
-  - Added binding for `fastddsjava_datareader_read_next_custom(...)`.
-
-Result:
-- The subscription path no longer hard-crashes when those specific ARM64 JNI symbols are absent.
-
-### 4) DDS discovery unreliability on Android Wi-Fi
-
-Symptom:
-- ROS 2 peers were not discovered consistently.
-
-Fix:
-- Enabled and acquired Android `WifiManager.MulticastLock`.
-- Ensured permissions include `CHANGE_WIFI_MULTICAST_STATE`.
-
-### 5) Dependency resolution/network constraints
-
-Symptom:
-- `--refresh-dependencies` failed with DNS/host errors (e.g. unable to resolve `repo.maven.apache.org`).
-
-Fix/Workaround:
-- Build without forced refresh when local caches are valid.
-- Ensure proxy/DNS access before forcing dependency refresh.
-
-## Known Limitations
-
-- Current ARM64 workaround is defensive at Java level; ideal long-term fix is to regenerate/rebuild ARM64 JNI binaries with full symbol parity.
-- If dependencies are not already cached, network/proxy configuration is required for fresh Gradle resolution.
-
-## Verification Checklist
-
-- `jros2-android` published locally from `jros2/android`.
-- This app builds with `assembleDebug`.
-- Phone installs APK and opens app.
-- Pressing Publish sends messages repeatedly without JNI crash.
-- Listener receives ROS 2 chatter from external node (WSL2/Linux).
+# Check battery
+ros2 topic echo /phone/battery
+```
 
 ## Main Dependencies
 
