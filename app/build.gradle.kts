@@ -82,6 +82,9 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
+    // Fix for XMLInputFactory not found on Android (Jackson XML / FastDDS Profiles)
+    implementation("javax.xml.stream:stax-api:1.0-2")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

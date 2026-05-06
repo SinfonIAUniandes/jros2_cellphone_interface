@@ -71,34 +71,33 @@ jros2_cellphone_interface/
 
 ## Build Instructions
 
-### 1) Publish patched `jros2-android` to Maven Local
+This application relies heavily on the `us.ihmc:jros2-android` AAR dependency, which provides the Fast-DDS native JNI libraries. 
 
-Important: publish from the Android module (`jros2/android`), not only from root `jros2`.
+### 1) Compile and Publish `jros2`
 
-PowerShell:
+Before building this app, you must compile the native C++ libraries and publish the Android AAR to your local Maven repository. 
 
+**Please refer to the "Compiling from Source" section in the jros2 for detailed instructions on compiling the native layer.**
+
+Once compiled, ensure the Android artifact is published:
 ```powershell
+# Inside the jros2/android directory
 $env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
-$env:Path="$env:JAVA_HOME\bin;$env:Path"
-
-cd ..\jros2\android
-..\gradlew -p . publishReleasePublicationToMavenLocal
+.\gradlew -p . publishReleasePublicationToMavenLocal
 ```
 
-### 2) Build this Android app
+### 2) Build this Android App
+
+Once `us.ihmc:jros2-android` is safely in your `mavenLocal()`, you can build the application:
 
 ```powershell
 cd ..\jros2_cellphone_interface
-.\gradlew assembleDebug
+.\gradlew clean assembleDebug
 ```
 
-APK output:
+### 3) Install on Phone
 
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
-
-### 3) Install on phone
+Locate the generated APK and push it to your Android device via ADB:
 
 ```powershell
 adb install -r app\build\outputs\apk\debug\app-debug.apk
