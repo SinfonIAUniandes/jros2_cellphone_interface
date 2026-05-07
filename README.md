@@ -1,6 +1,6 @@
 # jros2 Cellphone Sensor Bridge
 
-Android (Jetpack Compose) application that exports live phone sensor telemetry to ROS 2 using standard `sensor_msgs` and `std_msgs` message types over the IHMC `jros2-android` stack (Fast DDS + JavaCPP JNI).
+Android (Jetpack Compose) application that exports live phone sensor telemetry to ROS 2 using standard `sensor_msgs`, `std_msgs` message types, and custom `mobile_sensor_msgs` definitions over the IHMC `jros2-android` stack (Fast DDS + JavaCPP JNI).
 
 ---
 
@@ -19,7 +19,7 @@ Android (Jetpack Compose) application that exports live phone sensor telemetry t
 ## What This Project Does
 
 - Initializes a fully compliant ROS 2 Node (`phone_sensor_node`) directly on your physical Android smartphone.
-- Streams real-time, high-frequency telemetry from **7 hardware/software sensors** on the phone to external ROS 2 environments.
+- Streams real-time, high-frequency telemetry from **9+ hardware/software sensors and input devices** on the phone to external ROS 2 environments.
 - Features a premium, reactive, dark-themed sensor dashboard UI using Jetpack Compose.
 - Employs an Android multicast Wi-Fi lock to ensure robust, real-time discovery of DDS participants.
 
@@ -81,6 +81,8 @@ The following table documents each supported sensor, its default topic name, its
 | **GPS Fix** | `/phone/gps` | `sensor_msgs/NavSatFix` | 1 Hz | `GpsSensor.kt` |
 | **Proximity** | `/phone/proximity` | `std_msgs/Float32` | 5 Hz | `ProximitySensor.kt` |
 | **Battery State** | `/phone/battery` | `sensor_msgs/BatteryState` | 0.2 Hz | `BatterySensor.kt` |
+| **Touch Screen** | `/phone/touch` | `mobile_sensor_msgs/TouchArray` | 30 Hz | `TouchSensor.kt` |
+| **Biometric Auth** | `/phone/biometric` | `mobile_sensor_msgs/BiometricAuth` | Event-driven | `BiometricSensor.kt` |
 
 ---
 
@@ -104,7 +106,9 @@ jros2_cellphone_interface/
 │   │   │       ├── LightSensor.kt      # Illuminance measurements in Lux
 │   │   │       ├── GpsSensor.kt        # Location coordinate calculations
 │   │   │       ├── ProximitySensor.kt  # Proximity threshold alerts
-│   │   │       └── BatterySensor.kt    # Polling updates for battery charge & voltage
+│   │   │       ├── BatterySensor.kt    # Polling updates for battery charge & voltage
+│   │   │       ├── TouchSensor.kt      # Multi-touch screen input events
+│   │   │       └── BiometricSensor.kt  # Biometric authentication state & callbacks
 │   │   └── AndroidManifest.xml         # Hardware uses-permissions specifications
 │   └── build.gradle.kts                # Application dependencies config
 ├── build.gradle.kts
