@@ -30,7 +30,8 @@ class SensorBridge(private val context: Context) {
         LightSensor(),
         GpsSensor(),
         ProximitySensor(),
-        BatterySensor()
+        BatterySensor(),
+        MicrophoneSensor()
     )
 
     private val _isRunning = MutableStateFlow(false)

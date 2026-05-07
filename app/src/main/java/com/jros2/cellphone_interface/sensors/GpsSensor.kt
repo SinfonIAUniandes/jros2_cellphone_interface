@@ -55,7 +55,12 @@ class GpsSensor : PhoneSensor {
 
             publisher?.publish(msg)
             _count.value++
-            _value.value = "%.5f°, %.5f°".format(location.latitude, location.longitude)
+            val providerName = when (location.provider) {
+                LocationManager.GPS_PROVIDER -> "GPS"
+                LocationManager.NETWORK_PROVIDER -> "Net"
+                else -> location.provider ?: "Loc"
+            }
+            _value.value = "[%s] %.5f°, %.5f°".format(providerName, location.latitude, location.longitude)
         }
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
         override fun onProviderEnabled(provider: String) {}
@@ -65,6 +70,11 @@ class GpsSensor : PhoneSensor {
     override fun start(node: ROS2Node, context: Context) {
         publisher = node.createPublisher(ROS2Topic(topicName, NavSatFix::class.java))
         locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        
+        var registered = false
+        var permissionDenied = false
+
+        // 1. Try GPS Provider
         try {
             if (locationManager?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true) {
                 locationManager?.requestLocationUpdates(
@@ -73,9 +83,48 @@ class GpsSensor : PhoneSensor {
                     0f,
                     listener
                 )
+                registered = true
             }
         } catch (e: SecurityException) {
+            permissionDenied = true
+        }
+
+        // 2. Try Network Provider
+        try {
+            if (locationManager?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true) {
+                locationManager?.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    1000L,
+                    0f,
+                    listener
+                )
+                registered = true
+            }
+        } catch (e: SecurityException) {
+            permissionDenied = true
+        }
+
+        // 3. Immediately fetch last known location to avoid waiting/stuck state
+        var lastKnown: Location? = null
+        try {
+            if (locationManager?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true) {
+                lastKnown = locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            }
+            if (lastKnown == null && locationManager?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true) {
+                lastKnown = locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            }
+        } catch (e: SecurityException) {
+            permissionDenied = true
+        }
+
+        if (lastKnown != null) {
+            listener.onLocationChanged(lastKnown)
+        } else if (registered) {
+            _value.value = "Searching for lock..."
+        } else if (permissionDenied) {
             _value.value = "Permission denied"
+        } else {
+            _value.value = "No location providers enabled"
         }
     }
 

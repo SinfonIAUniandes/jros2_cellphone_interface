@@ -44,10 +44,10 @@ class MainActivity : ComponentActivity() {
     private lateinit var multicastLock: WifiManager.MulticastLock
     private lateinit var sensorBridge: SensorBridge
 
-    private val locationPermissionRequest = registerForActivityResult(
+    private val permissionRequest = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        // GPS will auto-register if granted
+        // Sensors depending on permissions will activate if granted.
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,7 +55,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         enableRosDiscovery()
-        requestLocationPermissions()
+        requestRuntimePermissions()
 
         val settingsManager = SettingsManager(this)
         sensorBridge = SensorBridge(this)
@@ -72,18 +72,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun requestLocationPermissions() {
+    private fun requestRuntimePermissions() {
         val fineGranted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
+        val micGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
 
+        val missingPermissions = mutableListOf<String>()
         if (!fineGranted) {
-            locationPermissionRequest.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
+            missingPermissions += Manifest.permission.ACCESS_FINE_LOCATION
+            missingPermissions += Manifest.permission.ACCESS_COARSE_LOCATION
+        }
+        if (!micGranted) {
+            missingPermissions += Manifest.permission.RECORD_AUDIO
+        }
+
+        if (missingPermissions.isNotEmpty()) {
+            permissionRequest.launch(missingPermissions.toTypedArray())
         }
     }
 
