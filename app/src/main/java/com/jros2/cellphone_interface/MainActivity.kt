@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
 import android.os.Bundle
+import android.view.MotionEvent
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -101,6 +102,13 @@ class MainActivity : FragmentActivity() {
         multicastLock = wifiManager.createMulticastLock("ros2_multicast_lock")
         multicastLock.setReferenceCounted(true)
         multicastLock.acquire()
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (::sensorBridge.isInitialized) {
+            sensorBridge.dispatchTouchToSensors(ev)
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onDestroy() {

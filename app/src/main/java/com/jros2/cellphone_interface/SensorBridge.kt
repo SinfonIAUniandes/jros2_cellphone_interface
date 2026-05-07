@@ -2,6 +2,7 @@ package com.jros2.cellphone_interface
 
 import android.content.Context
 import android.util.Log
+import android.view.MotionEvent
 import com.jros2.cellphone_interface.sensors.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +33,8 @@ class SensorBridge(private val context: Context) {
         ProximitySensor(),
         BatterySensor(),
         MicrophoneSensor(),
-        BiometricAuthSensor()
+        BiometricAuthSensor(),
+        TouchScreenSensor()
     )
 
     private val _isRunning = MutableStateFlow(false)
@@ -96,6 +98,11 @@ class SensorBridge(private val context: Context) {
     fun destroy() {
         stop()
         bridgeScope.cancel()
+    }
+
+    fun dispatchTouchToSensors(event: MotionEvent) {
+        if (!_isRunning.value) return
+        sensors.asSequence().filterIsInstance<TouchScreenSensor>().forEach { it.onMotionEvent(event) }
     }
 
     private fun log(msg: String) {
