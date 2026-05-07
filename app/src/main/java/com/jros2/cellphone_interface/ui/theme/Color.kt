@@ -24,6 +24,7 @@ val GpsColor = Color(0xFF3FB950)      // Green
 val ProximityColor = Color(0xFFD29922)// Amber
 val BatteryColor = Color(0xFFF78166)  // Orange
 val MicrophoneColor = Color(0xFF56D4DD)// Cyan
+val BiometricColor = Color(0xFF8BD17C) // Green
 
 // Text
 val TextPrimary = Color(0xFFE6EDF3)

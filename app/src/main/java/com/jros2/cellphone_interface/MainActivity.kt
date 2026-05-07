@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,12 +33,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
+import com.jros2.cellphone_interface.sensors.BiometricAuthSensor
 import com.jros2.cellphone_interface.sensors.PhoneSensor
 import com.jros2.cellphone_interface.ui.theme.*
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private lateinit var multicastLock: WifiManager.MulticastLock
     private lateinit var sensorBridge: SensorBridge
@@ -180,6 +182,8 @@ fun SensorCardItem(sensor: PhoneSensor, isRunning: Boolean) {
     val enabled by sensor.enabled.collectAsState()
     val value by sensor.displayValue.collectAsState()
     val count by sensor.messageCount.collectAsState()
+    val context = LocalContext.current
+    val biometricSensor = sensor as? BiometricAuthSensor
 
     val borderColor by animateColorAsState(
         when {
@@ -199,7 +203,7 @@ fun SensorCardItem(sensor: PhoneSensor, isRunning: Boolean) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(140.dp)
+            .height(if (biometricSensor != null) 170.dp else 140.dp)
             .border(1.dp, borderColor, RoundedCornerShape(12.dp)),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = cardBg)
@@ -249,6 +253,22 @@ fun SensorCardItem(sensor: PhoneSensor, isRunning: Boolean) {
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(vertical = 4.dp)
             )
+
+            if (biometricSensor != null) {
+                OutlinedButton(
+                    onClick = { biometricSensor.triggerAuthentication(context) },
+                    enabled = isRunning && enabled,
+                    modifier = Modifier.fillMaxWidth().height(30.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = biometricSensor.color,
+                        disabledContentColor = TextMuted
+                    )
+                ) {
+                    Text("Authenticate", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
 
             if (isRunning && enabled) {
                 Text(

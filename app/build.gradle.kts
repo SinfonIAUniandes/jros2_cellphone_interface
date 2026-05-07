@@ -74,6 +74,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation("androidx.biometric:biometric:1.1.0")
     implementation("us.ihmc:log-tools:0.6.5")
 
     implementation("us.ihmc:jros2-android:1.1.6")
