@@ -13,6 +13,7 @@ Android (Jetpack Compose) application that exports live phone sensor telemetry t
 6. [Permissions Requirements](#permissions-requirements)
 7. [Step-by-Step Guide: Adding a New Sensor](#step-by-step-guide-adding-a-new-sensor)
 8. [Verification from ROS 2](#verification-from-ros-2)
+9. [Latest Release](#latest-release)
 
 ---
 
@@ -22,6 +23,34 @@ Android (Jetpack Compose) application that exports live phone sensor telemetry t
 - Streams real-time, high-frequency telemetry from **11+ hardware/software sensors and input devices** on the phone to external ROS 2 environments.
 - Features a premium, reactive, dark-themed sensor dashboard UI using Jetpack Compose.
 - Employs an Android multicast Wi-Fi lock to ensure robust, real-time discovery of DDS participants.
+
+---
+
+## Latest Release
+
+The latest APK release is **v1.1.0**.
+
+- Release page: [v.1.1.0](https://github.com/SinfonIAUniandes/jros2_cellphone_interface/releases/tag/v.1.1.0)
+- Direct APK download: [app-debug.apk](https://github.com/SinfonIAUniandes/jros2_cellphone_interface/releases/download/v.1.1.0/app-debug.apk)
+
+### Installation Notes
+
+- Download the APK from the direct link above.
+- Install it with `adb install app-debug.apk`.
+- Grant Camera and Network permissions when prompted.
+
+### Network Notes
+
+- Streaming raw `sensor_msgs/Image` over Wi-Fi uses significant bandwidth.
+- A dedicated 5 GHz Wi-Fi subnet is recommended when possible.
+- If DDS discovery drops or the stream lags, lower the camera resolution in the app settings.
+
+### Prerequisites
+
+- Android 12 or newer.
+- Wi-Fi with multicast support enabled.
+- ROS 2 Jazzy compatibility.
+- Part of the jros2-android ecosystem.
 
 ---
 
