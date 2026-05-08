@@ -113,9 +113,15 @@ class DualCameraSensor : PhoneSensor {
         
         val colorMode = settings.cameraColor
         val rotation = settings.cameraRotation
+        val resolution = settings.cameraResolution
+        val (streamW, streamH) = when (resolution) {
+            "low" -> 320 to 240
+            "high" -> 1280 to 720
+            else -> 640 to 480 // "med"
+        }
 
-        frontStream = if (openFront && frontId != null) openStream(context, manager, frontId, true, colorMode, rotation) else null
-        backStream = if (openBack && backId != null) openStream(context, manager, backId, false, colorMode, rotation) else null
+        frontStream = if (openFront && frontId != null) openStream(context, manager, frontId, true, colorMode, rotation, streamW, streamH) else null
+        backStream = if (openBack && backId != null) openStream(context, manager, backId, false, colorMode, rotation, streamW, streamH) else null
 
         _value.value = when {
             openFront && openBack -> "Streaming front+back"
@@ -126,12 +132,25 @@ class DualCameraSensor : PhoneSensor {
     }
 
     override fun stop() {
-        frontStream?.close()
-        backStream?.close()
+        try {
+            frontStream?.close()
+        } catch (e: Exception) {
+            // Ignore
+        }
+        try {
+            backStream?.close()
+        } catch (e: Exception) {
+            // Ignore
+        }
         frontStream = null
         backStream = null
 
-        cameraThread?.quitSafely()
+        try {
+            cameraThread?.quitSafely()
+            cameraThread?.join(500)
+        } catch (e: Exception) {
+            // Ignore
+        }
         cameraThread = null
         cameraHandler = null
 
@@ -156,10 +175,12 @@ class DualCameraSensor : PhoneSensor {
         cameraId: String, 
         isFront: Boolean,
         colorMode: Boolean,
-        rotation: Int
+        rotation: Int,
+        width: Int,
+        height: Int
     ): CameraStream {
         val handler = cameraHandler ?: error("Camera handler not initialized")
-        val reader = ImageReader.newInstance(640, 480, ImageFormat.YUV_420_888, 2)
+        val reader = ImageReader.newInstance(width, height, ImageFormat.YUV_420_888, 2)
         val stream = CameraStream(cameraId, isFront, reader)
         val publisher = if (isFront) frontPublisher else backPublisher
 
@@ -413,9 +434,31 @@ class DualCameraSensor : PhoneSensor {
         var session: CameraCaptureSession? = null
     ) {
         fun close() {
-            session?.close()
-            device?.close()
-            reader.close()
+            try {
+                reader.setOnImageAvailableListener(null, null)
+            } catch (e: Exception) {
+                // Ignore
+            }
+            try {
+                session?.stopRepeating()
+            } catch (e: Exception) {
+                // Ignore
+            }
+            try {
+                session?.close()
+            } catch (e: Exception) {
+                // Ignore
+            }
+            try {
+                device?.close()
+            } catch (e: Exception) {
+                // Ignore
+            }
+            try {
+                reader.close()
+            } catch (e: Exception) {
+                // Ignore
+            }
         }
     }
 }

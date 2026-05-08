@@ -459,6 +459,7 @@ fun SettingsDialog(
     var selectedCameraMode by remember { mutableStateOf(settingsManager.cameraMode) }
     var selectedCameraRotation by remember { mutableStateOf(settingsManager.cameraRotation) }
     var selectedCameraColor by remember { mutableStateOf(settingsManager.cameraColor) }
+    var selectedCameraResolution by remember { mutableStateOf(settingsManager.cameraResolution) }
     val topicNames = remember {
         mutableStateMapOf<String, String>().apply {
             sensors.forEach { sensor ->
@@ -627,6 +628,39 @@ fun SettingsDialog(
                                 }
                             }
                         }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Camera Resolution",
+                            color = TextSecondary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val resolutions = listOf(
+                                "low" to "Low (320x240) 🏎️",
+                                "med" to "Med (640x480) ⚖️",
+                                "high" to "High (1280x720) 🖥️"
+                            )
+                            resolutions.forEach { (resKey, resName) ->
+                                val isSelected = selectedCameraResolution == resKey
+                                Button(
+                                    onClick = { selectedCameraResolution = resKey },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isSelected) CyanAccent else DarkCardBorder,
+                                        contentColor = if (isSelected) Color.Black else TextSecondary
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                                ) {
+                                    Text(resName, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
                         Spacer(modifier = Modifier.height(20.dp))
                         Text(
                             text = "Sensor Topics",
@@ -670,6 +704,7 @@ fun SettingsDialog(
                             settingsManager.cameraMode = selectedCameraMode
                             settingsManager.cameraRotation = selectedCameraRotation
                             settingsManager.cameraColor = selectedCameraColor
+                            settingsManager.cameraResolution = selectedCameraResolution
                             topicNames.forEach { (id, name) ->
                                 settingsManager.setTopicName(id, name)
                             }

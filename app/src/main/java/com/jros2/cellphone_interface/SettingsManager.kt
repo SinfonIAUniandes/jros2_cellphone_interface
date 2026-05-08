@@ -33,4 +33,8 @@ class SettingsManager(context: Context) {
     var cameraColor: Boolean
         get() = prefs.getBoolean("camera_color", true)
         set(value) = prefs.edit().putBoolean("camera_color", value).apply()
+
+    var cameraResolution: String
+        get() = prefs.getString("camera_resolution", "med") ?: "med"
+        set(value) = prefs.edit().putString("camera_resolution", value).apply()
 }
