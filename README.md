@@ -6,14 +6,14 @@ Android (Jetpack Compose) application that exports live phone sensor telemetry t
 
 ## Table of Contents
 1. [What This Project Does](#what-this-project-does)
-2. [Architecture & How It Works](#architecture--how-it-works)
+2. [Latest Release](#latest-release)
 3. [Sensor Mapping & File Registry](#sensor-mapping--file-registry)
-4. [Project Directory Layout](#project-directory-layout)
-5. [Prerequisites & Build Instructions](#prerequisites--build-instructions)
-6. [Permissions Requirements](#permissions-requirements)
-7. [Step-by-Step Guide: Adding a New Sensor](#step-by-step-guide-adding-a-new-sensor)
-8. [Verification from ROS 2](#verification-from-ros-2)
-9. [Latest Release](#latest-release)
+4. [Prerequisites & Build Instructions](#prerequisites--build-instructions)
+5. [Permissions Requirements](#permissions-requirements)
+6. [Architecture & How It Works](#architecture--how-it-works)
+7. [Project Directory Layout](#project-directory-layout)
+8. [Step-by-Step Guide: Adding a New Sensor](#step-by-step-guide-adding-a-new-sensor)
+9. [Verification from ROS 2](#verification-from-ros-2)
 
 ---
 
@@ -51,6 +51,72 @@ The latest APK release is **v1.1.0**.
 - Wi-Fi with multicast support enabled.
 - ROS 2 Jazzy compatibility.
 - Part of the jros2-android ecosystem.
+
+---
+
+## Sensor Mapping & File Registry
+
+The following table documents each supported sensor, its default topic name, its message definition, target publish rate, and the exact `.kt` file where the logic resides:
+
+| Sensor Type | ROS 2 Topic Name | Message Type | Target Rate | Implementing File Path |
+| :--- | :--- | :--- | :--- | :--- |
+| **IMU** | `/phone/imu` | `sensor_msgs/Imu` | 50 Hz | `ImuSensor.kt` |
+| **Magnetometer** | `/phone/magnetic_field` | `sensor_msgs/MagneticField` | 10 Hz | `MagnetometerSensor.kt` |
+| **Barometer** | `/phone/pressure` | `sensor_msgs/FluidPressure` | 5 Hz | `PressureSensor.kt` |
+| **Ambient Light** | `/phone/illuminance` | `sensor_msgs/Illuminance` | 5 Hz | `LightSensor.kt` |
+| **GPS Fix** | `/phone/gps` | `sensor_msgs/NavSatFix` | 1 Hz | `GpsSensor.kt` |
+| **Proximity** | `/phone/proximity` | `std_msgs/Float32` | 5 Hz | `ProximitySensor.kt` |
+| **Battery State** | `/phone/battery` | `sensor_msgs/BatteryState` | 0.2 Hz | `BatterySensor.kt` |
+| **Touch Screen** | `/phone/touch` | `mobile_sensor_msgs/TouchArray` | 30 Hz | `TouchSensor.kt` |
+| **Biometric Auth** | `/phone/biometric` | `mobile_sensor_msgs/BiometricAuth` | Event-driven | `BiometricSensor.kt` |
+| **Camera** | `/phone/camera/front/image` and `/phone/camera/back/image` | `sensor_msgs/Image` | Streaming | `DualCameraSensor.kt` |
+
+The camera bridge supports front, back, or dual streaming depending on the device and the selected camera mode. Related runtime settings include camera mode, rotation, color, and resolution.
+
+---
+
+## Prerequisites & Build Instructions
+
+This application relies heavily on the `us.ihmc:jros2-android` AAR dependency, which provides the Fast-DDS native JNI libraries. 
+
+### 1) Compile and Publish `jros2`
+
+Before building this app, you must compile the native C++ libraries and publish the Android AAR to your local Maven repository. 
+
+**Please refer to the "Compiling from Source" section in the jros2 for detailed instructions on compiling the native layer.**
+
+Once compiled, ensure the Android artifact is published:
+```powershell
+# Inside the jros2/android directory
+$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
+.\gradlew -p . publishReleasePublicationToMavenLocal
+```
+
+### 2) Build this Android App
+
+Once `us.ihmc:jros2-android` is safely in your `mavenLocal()`, you can build the application:
+
+```powershell
+cd ..\jros2_cellphone_interface
+.\gradlew clean assembleDebug
+```
+
+### 3) Install via ADB
+Push the built binary to your connected physical Android device:
+```powershell
+adb install -r app\build\outputs\apk\debug\app-debug.apk
+```
+
+---
+
+## Permissions Requirements
+
+The following permissions are registered inside [`AndroidManifest.xml`](file:///c:/Users/David.DESKTOP-A6NC9IE/Desktop/Cuevas/WearROS2/jros2_cellphone_interface/app/src/main/AndroidManifest.xml) and handled automatically:
+*   `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`: Standard DDS local communication over UDP.
+*   `CHANGE_WIFI_MULTICAST_STATE`: Enables Wi-Fi Multicast lock required by Fast DDS for network discovery.
+*   `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`: Required for GPS coordinate retrieval.
+*   `CAMERA`: Required for front/back camera streaming and `sensor_msgs/Image` publishing.
+*   `HIGH_SAMPLING_RATE_SENSORS`: Enables high-frequency (>20Hz) sensor updates on Android 12+.
 
 ---
 
@@ -97,27 +163,6 @@ This project is built using a highly decoupled, modular architecture designed fo
 
 ---
 
-## Sensor Mapping & File Registry
-
-The following table documents each supported sensor, its default topic name, its message definition, target publish rate, and the exact `.kt` file where the logic resides:
-
-| Sensor Type | ROS 2 Topic Name | Message Type | Target Rate | Implementing File Path |
-| :--- | :--- | :--- | :--- | :--- |
-| **IMU** | `/phone/imu` | `sensor_msgs/Imu` | 50 Hz | `ImuSensor.kt` |
-| **Magnetometer** | `/phone/magnetic_field` | `sensor_msgs/MagneticField` | 10 Hz | `MagnetometerSensor.kt` |
-| **Barometer** | `/phone/pressure` | `sensor_msgs/FluidPressure` | 5 Hz | `PressureSensor.kt` |
-| **Ambient Light** | `/phone/illuminance` | `sensor_msgs/Illuminance` | 5 Hz | `LightSensor.kt` |
-| **GPS Fix** | `/phone/gps` | `sensor_msgs/NavSatFix` | 1 Hz | `GpsSensor.kt` |
-| **Proximity** | `/phone/proximity` | `std_msgs/Float32` | 5 Hz | `ProximitySensor.kt` |
-| **Battery State** | `/phone/battery` | `sensor_msgs/BatteryState` | 0.2 Hz | `BatterySensor.kt` |
-| **Touch Screen** | `/phone/touch` | `mobile_sensor_msgs/TouchArray` | 30 Hz | `TouchSensor.kt` |
-| **Biometric Auth** | `/phone/biometric` | `mobile_sensor_msgs/BiometricAuth` | Event-driven | `BiometricSensor.kt` |
-| **Camera** | `/phone/camera/front/image` and `/phone/camera/back/image` | `sensor_msgs/Image` | Streaming | `DualCameraSensor.kt` |
-
-The camera bridge supports front, back, or dual streaming depending on the device and the selected camera mode. Related runtime settings include camera mode, rotation, color, and resolution.
-
----
-
 ## Project Directory Layout
 
 ```text
@@ -147,51 +192,6 @@ jros2_cellphone_interface/
 ├── build.gradle.kts
 └── settings.gradle.kts
 ```
-
----
-
-## Prerequisites & Build Instructions
-
-This application relies heavily on the `us.ihmc:jros2-android` AAR dependency, which provides the Fast-DDS native JNI libraries. 
-
-### 1) Compile and Publish `jros2`
-
-Before building this app, you must compile the native C++ libraries and publish the Android AAR to your local Maven repository. 
-
-**Please refer to the "Compiling from Source" section in the jros2 for detailed instructions on compiling the native layer.**
-
-Once compiled, ensure the Android artifact is published:
-```powershell
-# Inside the jros2/android directory
-$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
-.\gradlew -p . publishReleasePublicationToMavenLocal
-```
-
-### 2) Build this Android App
-
-Once `us.ihmc:jros2-android` is safely in your `mavenLocal()`, you can build the application:
-
-```powershell
-cd ..\jros2_cellphone_interface
-.\gradlew clean assembleDebug
-```
-
-### 3) Install via ADB
-Push the built binary to your connected physical Android device:
-```powershell
-adb install -r app\build\outputs\apk\debug\app-debug.apk
-```
-
----
-
-## Permissions Requirements
-
-The following permissions are registered inside [`AndroidManifest.xml`](file:///c:/Users/David.DESKTOP-A6NC9IE/Desktop/Cuevas/WearROS2/jros2_cellphone_interface/app/src/main/AndroidManifest.xml) and handled automatically:
-*   `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`: Standard DDS local communication over UDP.
-*   `CHANGE_WIFI_MULTICAST_STATE`: Enables Wi-Fi Multicast lock required by Fast DDS for network discovery.
-*   `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`: Required for GPS coordinate retrieval.
-*   `CAMERA`: Required for front/back camera streaming and `sensor_msgs/Image` publishing.
-*   `HIGH_SAMPLING_RATE_SENSORS`: Enables high-frequency (>20Hz) sensor updates on Android 12+.
 
 ---
 
