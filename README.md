@@ -19,7 +19,7 @@ Android (Jetpack Compose) application that exports live phone sensor telemetry t
 ## What This Project Does
 
 - Initializes a fully compliant ROS 2 Node (`phone_sensor_node`) directly on your physical Android smartphone.
-- Streams real-time, high-frequency telemetry from **9+ hardware/software sensors and input devices** on the phone to external ROS 2 environments.
+- Streams real-time, high-frequency telemetry from **11+ hardware/software sensors and input devices** on the phone to external ROS 2 environments.
 - Features a premium, reactive, dark-themed sensor dashboard UI using Jetpack Compose.
 - Employs an Android multicast Wi-Fi lock to ensure robust, real-time discovery of DDS participants.
 
@@ -83,6 +83,9 @@ The following table documents each supported sensor, its default topic name, its
 | **Battery State** | `/phone/battery` | `sensor_msgs/BatteryState` | 0.2 Hz | `BatterySensor.kt` |
 | **Touch Screen** | `/phone/touch` | `mobile_sensor_msgs/TouchArray` | 30 Hz | `TouchSensor.kt` |
 | **Biometric Auth** | `/phone/biometric` | `mobile_sensor_msgs/BiometricAuth` | Event-driven | `BiometricSensor.kt` |
+| **Camera** | `/phone/camera/front/image` and `/phone/camera/back/image` | `sensor_msgs/Image` | Streaming | `DualCameraSensor.kt` |
+
+The camera bridge supports front, back, or dual streaming depending on the device and the selected camera mode. Related runtime settings include camera mode, rotation, color, and resolution.
 
 ---
 
@@ -107,6 +110,7 @@ jros2_cellphone_interface/
 │   │   │       ├── GpsSensor.kt        # Location coordinate calculations
 │   │   │       ├── ProximitySensor.kt  # Proximity threshold alerts
 │   │   │       ├── BatterySensor.kt    # Polling updates for battery charge & voltage
+│   │   │       ├── DualCameraSensor.kt # Front/back camera streaming as sensor_msgs/Image
 │   │   │       ├── TouchSensor.kt      # Multi-touch screen input events
 │   │   │       └── BiometricSensor.kt  # Biometric authentication state & callbacks
 │   │   └── AndroidManifest.xml         # Hardware uses-permissions specifications
@@ -157,6 +161,7 @@ The following permissions are registered inside [`AndroidManifest.xml`](file:///
 *   `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`: Standard DDS local communication over UDP.
 *   `CHANGE_WIFI_MULTICAST_STATE`: Enables Wi-Fi Multicast lock required by Fast DDS for network discovery.
 *   `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`: Required for GPS coordinate retrieval.
+*   `CAMERA`: Required for front/back camera streaming and `sensor_msgs/Image` publishing.
 *   `HIGH_SAMPLING_RATE_SENSORS`: Enables high-frequency (>20Hz) sensor updates on Android 12+.
 
 ---
