@@ -1,6 +1,7 @@
 package com.jros2.cellphone_interface.sensors
 
 import android.content.Context
+import java.nio.ByteBuffer
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
 import android.hardware.camera2.CameraCaptureSession
@@ -110,8 +111,11 @@ class DualCameraSensor : PhoneSensor {
         frontFrames = 0L
         backFrames = 0L
         
-        frontStream = if (openFront && frontId != null) openStream(context, manager, frontId, true) else null
-        backStream = if (openBack && backId != null) openStream(context, manager, backId, false) else null
+        val colorMode = settings.cameraColor
+        val rotation = settings.cameraRotation
+
+        frontStream = if (openFront && frontId != null) openStream(context, manager, frontId, true, colorMode, rotation) else null
+        backStream = if (openBack && backId != null) openStream(context, manager, backId, false, colorMode, rotation) else null
 
         _value.value = when {
             openFront && openBack -> "Streaming front+back"
@@ -146,21 +150,23 @@ class DualCameraSensor : PhoneSensor {
         return null
     }
 
-    private fun openStream(context: Context, manager: CameraManager, cameraId: String, isFront: Boolean): CameraStream {
+    private fun openStream(
+        context: Context, 
+        manager: CameraManager, 
+        cameraId: String, 
+        isFront: Boolean,
+        colorMode: Boolean,
+        rotation: Int
+    ): CameraStream {
         val handler = cameraHandler ?: error("Camera handler not initialized")
         val reader = ImageReader.newInstance(640, 480, ImageFormat.YUV_420_888, 2)
         val stream = CameraStream(cameraId, isFront, reader)
         val publisher = if (isFront) frontPublisher else backPublisher
-        val frameId = if (isFront) "phone_camera_front" else "phone_camera_back"
 
         reader.setOnImageAvailableListener({ imageReader ->
             val image = imageReader.acquireLatestImage() ?: return@setOnImageAvailableListener
             try {
-                val msg = toRosImage(image, frameId)
-                publisher?.publish(msg)
-                _count.value++
-                if (isFront) frontFrames++ else backFrames++
-                _value.value = "F:$frontFrames B:$backFrames"
+                processAndPublishImage(image, publisher, isFront, colorMode, rotation)
             } finally {
                 image.close()
             }
@@ -199,40 +205,204 @@ class DualCameraSensor : PhoneSensor {
         return stream
     }
 
-    private fun toRosImage(image: android.media.Image, frameId: String): Image {
-        val msg = Image()
-        stampHeader(msg.header, frameId)
+    private fun processAndPublishImage(
+        image: android.media.Image, 
+        publisher: ROS2Publisher<Image>?, 
+        isFront: Boolean,
+        colorMode: Boolean,
+        rotation: Int
+    ) {
+        if (publisher == null) return
 
         val width = image.width
         val height = image.height
-        msg.setWidth(width)
-        msg.setHeight(height)
-        msg.setEncoding("mono8")
-        msg.setIsBigendian(0)
-        msg.setStep(width)
 
-        val yPlane = image.planes[0]
-        val rowStride = yPlane.rowStride
-        val pixelStride = yPlane.pixelStride
-        val src = yPlane.buffer
-        val data = msg.getData()
-        data.clear()
+        val msg = Image()
+        val frameId = if (isFront) "phone_camera_front" else "phone_camera_back"
+        stampHeader(msg.header, frameId)
 
-        if (pixelStride == 1 && rowStride == width) {
-            val mono = ByteArray(width * height)
-            src.get(mono, 0, mono.size)
-            for (b in mono) {
+        // Target dimensions after rotation
+        val rotWidth = if (rotation == 90 || rotation == 270) height else width
+        val rotHeight = if (rotation == 90 || rotation == 270) width else height
+
+        msg.setWidth(rotWidth)
+        msg.setHeight(rotHeight)
+
+        if (colorMode) {
+            // Color Mode (RGB8)
+            msg.setEncoding("rgb8")
+            msg.setIsBigendian(0)
+            msg.setStep(rotWidth * 3)
+
+            val rgbBytes = ByteArray(width * height * 3)
+            yuvToRgb8(image, rgbBytes)
+
+            val rotatedBytes = ByteArray(rotWidth * rotHeight * 3)
+            rotateImageBytes(rgbBytes, width, height, rotatedBytes, rotation, pixelSize = 3)
+
+            val data = msg.getData()
+            data.clear()
+            for (b in rotatedBytes) {
                 data.add(b)
             }
         } else {
-            for (row in 0 until height) {
-                val rowStart = row * rowStride
-                for (col in 0 until width) {
-                    data.add(src.get(rowStart + col * pixelStride))
-                }
+            // Grayscale Mode (Mono8)
+            msg.setEncoding("mono8")
+            msg.setIsBigendian(0)
+            msg.setStep(rotWidth)
+
+            val monoBytes = ByteArray(width * height)
+            yuvToMono8(image, monoBytes)
+
+            val rotatedBytes = ByteArray(rotWidth * rotHeight)
+            rotateImageBytes(monoBytes, width, height, rotatedBytes, rotation, pixelSize = 1)
+
+            val data = msg.getData()
+            data.clear()
+            for (b in rotatedBytes) {
+                data.add(b)
             }
         }
-        return msg
+
+        publisher.publish(msg)
+        _count.value++
+        if (isFront) frontFrames++ else backFrames++
+        _value.value = "F:$frontFrames B:$backFrames"
+    }
+
+    private fun yuvToRgb8(image: android.media.Image, rgbBytes: ByteArray) {
+        val width = image.width
+        val height = image.height
+        
+        val yPlane = image.planes[0]
+        val uPlane = image.planes[1]
+        val vPlane = image.planes[2]
+        
+        val yBuffer = yPlane.buffer
+        val uBuffer = uPlane.buffer
+        val vBuffer = vPlane.buffer
+        
+        val yRowStride = yPlane.rowStride
+        val yPixelStride = yPlane.pixelStride
+        val uRowStride = uPlane.rowStride
+        val uPixelStride = uPlane.pixelStride
+        val vRowStride = vPlane.rowStride
+        val vPixelStride = vPlane.pixelStride
+        
+        val yLimit = yBuffer.limit()
+        val uLimit = uBuffer.limit()
+        val vLimit = vBuffer.limit()
+        
+        var rgbIndex = 0
+        
+        for (y in 0 until height) {
+            val yRowStart = y * yRowStride
+            val uvRowStart = (y / 2) * uRowStride
+            val vRowStart = (y / 2) * vRowStride
+            
+            for (x in 0 until width) {
+                val yIndex = yRowStart + x * yPixelStride
+                val uIndex = uvRowStart + (x / 2) * uPixelStride
+                val vIndex = vRowStart + (x / 2) * vPixelStride
+                
+                val yVal = if (yIndex in 0 until yLimit) (yBuffer.get(yIndex).toInt() and 0xFF) else 0
+                val uVal = if (uIndex in 0 until uLimit) (uBuffer.get(uIndex).toInt() and 0xFF) - 128 else 0
+                val vVal = if (vIndex in 0 until vLimit) (vBuffer.get(vIndex).toInt() and 0xFF) - 128 else 0
+                
+                // YUV to RGB Conversion Formula
+                val r = (yVal + 1.402 * vVal).toInt()
+                val g = (yVal - 0.34414 * uVal - 0.71414 * vVal).toInt()
+                val b = (yVal + 1.772 * uVal).toInt()
+                
+                rgbBytes[rgbIndex++] = r.coerceIn(0, 255).toByte()
+                rgbBytes[rgbIndex++] = g.coerceIn(0, 255).toByte()
+                rgbBytes[rgbIndex++] = b.coerceIn(0, 255).toByte()
+            }
+        }
+    }
+
+    private fun yuvToMono8(image: android.media.Image, monoBytes: ByteArray) {
+        val width = image.width
+        val height = image.height
+        
+        val yPlane = image.planes[0]
+        val yBuffer = yPlane.buffer
+        val yRowStride = yPlane.rowStride
+        val yPixelStride = yPlane.pixelStride
+        val yLimit = yBuffer.limit()
+        
+        var monoIndex = 0
+        
+        for (y in 0 until height) {
+            val yRowStart = y * yRowStride
+            for (x in 0 until width) {
+                val yIndex = yRowStart + x * yPixelStride
+                val yVal = if (yIndex in 0 until yLimit) yBuffer.get(yIndex) else 0.toByte()
+                monoBytes[monoIndex++] = yVal
+            }
+        }
+    }
+
+    private fun rotateImageBytes(
+        input: ByteArray,
+        w: Int,
+        h: Int,
+        output: ByteArray,
+        rotation: Int,
+        pixelSize: Int
+    ) {
+        if (rotation == 0) {
+            System.arraycopy(input, 0, output, 0, input.size)
+            return
+        }
+
+        when (rotation) {
+            90 -> {
+                for (row in 0 until h) {
+                    for (col in 0 until w) {
+                        val srcIdx = (row * w + col) * pixelSize
+                        val destRow = col
+                        val destCol = h - 1 - row
+                        val destIdx = (destRow * h + destCol) * pixelSize
+                        
+                        for (i in 0 until pixelSize) {
+                            output[destIdx + i] = input[srcIdx + i]
+                        }
+                    }
+                }
+            }
+            180 -> {
+                for (row in 0 until h) {
+                    for (col in 0 until w) {
+                        val srcIdx = (row * w + col) * pixelSize
+                        val destRow = h - 1 - row
+                        val destCol = w - 1 - col
+                        val destIdx = (destRow * w + destCol) * pixelSize
+                        
+                        for (i in 0 until pixelSize) {
+                            output[destIdx + i] = input[srcIdx + i]
+                        }
+                    }
+                }
+            }
+            270 -> {
+                for (row in 0 until h) {
+                    for (col in 0 until w) {
+                        val srcIdx = (row * w + col) * pixelSize
+                        val destRow = w - 1 - col
+                        val destCol = row
+                        val destIdx = (destRow * h + destCol) * pixelSize
+                        
+                        for (i in 0 until pixelSize) {
+                            output[destIdx + i] = input[srcIdx + i]
+                        }
+                    }
+                }
+            }
+            else -> {
+                System.arraycopy(input, 0, output, 0, input.size)
+            }
+        }
     }
 
     private data class CameraStream(

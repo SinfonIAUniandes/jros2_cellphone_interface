@@ -457,6 +457,8 @@ fun SettingsDialog(
         }
     }
     var selectedCameraMode by remember { mutableStateOf(settingsManager.cameraMode) }
+    var selectedCameraRotation by remember { mutableStateOf(settingsManager.cameraRotation) }
+    var selectedCameraColor by remember { mutableStateOf(settingsManager.cameraColor) }
     val topicNames = remember {
         mutableStateMapOf<String, String>().apply {
             sensors.forEach { sensor ->
@@ -556,6 +558,75 @@ fun SettingsDialog(
                                 }
                             }
                         }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // Color Format
+                            Column(modifier = Modifier.weight(1.1f)) {
+                                Text(
+                                    text = "Color Format",
+                                    color = TextSecondary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    val colors = listOf(true to "RGB 🎨", false to "Mono 🔲")
+                                    colors.forEach { (isColor, label) ->
+                                        val isSelected = selectedCameraColor == isColor
+                                        Button(
+                                            onClick = { selectedCameraColor = isColor },
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (isSelected) CyanAccent else DarkCardBorder,
+                                                contentColor = if (isSelected) Color.Black else TextSecondary
+                                            ),
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(vertical = 8.dp)
+                                        ) {
+                                            Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Camera Rotation
+                            Column(modifier = Modifier.weight(1.9f)) {
+                                Text(
+                                    text = "Rotation",
+                                    color = TextSecondary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    val rotations = listOf(0 to "0°", 90 to "90°", 180 to "180°", 270 to "270°")
+                                    rotations.forEach { (angle, label) ->
+                                        val isSelected = selectedCameraRotation == angle
+                                        Button(
+                                            onClick = { selectedCameraRotation = angle },
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (isSelected) CyanAccent else DarkCardBorder,
+                                                contentColor = if (isSelected) Color.Black else TextSecondary
+                                            ),
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp)
+                                        ) {
+                                            Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         Spacer(modifier = Modifier.height(20.dp))
                         Text(
                             text = "Sensor Topics",
@@ -597,6 +668,8 @@ fun SettingsDialog(
                             settingsManager.domainId = domainId.toIntOrNull() ?: 0
                             settingsManager.namespace = namespace
                             settingsManager.cameraMode = selectedCameraMode
+                            settingsManager.cameraRotation = selectedCameraRotation
+                            settingsManager.cameraColor = selectedCameraColor
                             topicNames.forEach { (id, name) ->
                                 settingsManager.setTopicName(id, name)
                             }

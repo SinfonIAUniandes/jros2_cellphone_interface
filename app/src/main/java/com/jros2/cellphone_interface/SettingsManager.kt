@@ -25,4 +25,12 @@ class SettingsManager(context: Context) {
     var cameraMode: String
         get() = prefs.getString("camera_mode", "back") ?: "back"
         set(value) = prefs.edit().putString("camera_mode", value).apply()
+
+    var cameraRotation: Int
+        get() = prefs.getInt("camera_rotation", 0)
+        set(value) = prefs.edit().putInt("camera_rotation", value).apply()
+
+    var cameraColor: Boolean
+        get() = prefs.getBoolean("camera_color", true)
+        set(value) = prefs.edit().putBoolean("camera_color", value).apply()
 }
