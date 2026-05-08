@@ -26,6 +26,7 @@ val BatteryColor = Color(0xFFF78166)  // Orange
 val MicrophoneColor = Color(0xFF56D4DD)// Cyan
 val BiometricColor = Color(0xFF8BD17C) // Green
 val TouchColor = Color(0xFFFFB86A) // Orange
+val CameraColor = Color(0xFF9AA5FF) // Indigo
 
 // Text
 val TextPrimary = Color(0xFFE6EDF3)

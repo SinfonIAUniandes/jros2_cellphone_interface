@@ -21,4 +21,8 @@ class SettingsManager(context: Context) {
     fun setTopicName(sensorId: String, topicName: String) {
         prefs.edit().putString("topic_$sensorId", topicName).apply()
     }
+
+    var cameraMode: String
+        get() = prefs.getString("camera_mode", "back") ?: "back"
+        set(value) = prefs.edit().putString("camera_mode", value).apply()
 }

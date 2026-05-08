@@ -1,7 +1,9 @@
 package com.jros2.cellphone_interface
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.hardware.camera2.CameraManager
 import android.net.wifi.WifiManager
 import android.os.Bundle
 import android.view.MotionEvent
@@ -82,6 +84,9 @@ class MainActivity : FragmentActivity() {
         val micGranted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
+        val camGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
 
         val missingPermissions = mutableListOf<String>()
         if (!fineGranted) {
@@ -90,6 +95,9 @@ class MainActivity : FragmentActivity() {
         }
         if (!micGranted) {
             missingPermissions += Manifest.permission.RECORD_AUDIO
+        }
+        if (!camGranted) {
+            missingPermissions += Manifest.permission.CAMERA
         }
 
         if (missingPermissions.isNotEmpty()) {
@@ -439,6 +447,16 @@ fun SettingsDialog(
 ) {
     var domainId by remember { mutableStateOf(settingsManager.domainId.toString()) }
     var namespace by remember { mutableStateOf(settingsManager.namespace) }
+    val context = LocalContext.current
+    val cameraManager = remember { context.getSystemService(Context.CAMERA_SERVICE) as CameraManager }
+    val supportsConcurrent = remember {
+        try {
+            cameraManager.concurrentCameraIds.isNotEmpty()
+        } catch (e: Exception) {
+            false
+        }
+    }
+    var selectedCameraMode by remember { mutableStateOf(settingsManager.cameraMode) }
     val topicNames = remember {
         mutableStateMapOf<String, String>().apply {
             sensors.forEach { sensor ->
@@ -498,6 +516,48 @@ fun SettingsDialog(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
+                            text = "Camera Source Mode",
+                            color = TextSecondary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val modes = listOf(
+                                "back" to "Back 📷",
+                                "front" to "Front 🤳",
+                                "dual" to "Dual 👥"
+                            )
+                            modes.forEach { (modeKey, modeName) ->
+                                val isEnabled = modeKey != "dual" || supportsConcurrent
+                                val isSelected = selectedCameraMode == modeKey
+
+                                Button(
+                                    onClick = { selectedCameraMode = modeKey },
+                                    enabled = isEnabled,
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isSelected) CyanAccent else DarkCardBorder,
+                                        contentColor = if (isSelected) Color.Black else TextSecondary,
+                                        disabledContainerColor = DarkCardBorder.copy(alpha = 0.3f),
+                                        disabledContentColor = TextMuted.copy(alpha = 0.5f)
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                                ) {
+                                    Text(
+                                        text = if (modeKey == "dual" && !supportsConcurrent) "$modeName (N/A)" else modeName,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Text(
                             text = "Sensor Topics",
                             color = TextSecondary,
                             fontSize = 14.sp,
@@ -536,6 +596,7 @@ fun SettingsDialog(
                         onClick = {
                             settingsManager.domainId = domainId.toIntOrNull() ?: 0
                             settingsManager.namespace = namespace
+                            settingsManager.cameraMode = selectedCameraMode
                             topicNames.forEach { (id, name) ->
                                 settingsManager.setTopicName(id, name)
                             }
