@@ -2,6 +2,10 @@
 
 Android (Jetpack Compose) application that exports live phone sensor telemetry to ROS 2 using standard `sensor_msgs`, `std_msgs` message types, and custom `mobile_sensor_msgs` definitions over the IHMC `jros2-android` stack (Fast DDS + JavaCPP JNI).
 
+## Video Demonstration
+
+[![jros2 Cellphone Sensor Bridge Demo](https://img.youtube.com/vi/skNQdbO8yrw/maxresdefault.jpg)](https://www.youtube.com/watch?v=skNQdbO8yrw)
+
 ---
 
 ## Table of Contents
