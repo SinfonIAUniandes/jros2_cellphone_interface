@@ -2,6 +2,10 @@
 
 Android (Jetpack Compose) application that exports live phone sensor telemetry to ROS 2 using standard `sensor_msgs`, `std_msgs` message types, and custom `mobile_sensor_msgs` definitions over the IHMC `jros2-android` stack (Fast DDS + JavaCPP JNI).
 
+This project is built around [the official IHMC jros2 repository](https://github.com/ihmcrobotics/jros2), but it uses the [SinfonIAUniandes jros2 fork](https://github.com/SinfonIAUniandes/jros2) because that fork was adapted for Kotlin compatibility in this Android application.
+
+At the message layer, this app also depends on [mobile_sensor_msgs](https://github.com/SinfonIAUniandes/mobile_sensor_msgs), which defines the mobile-specific ROS 2 message types used by the bridge.
+
 ## Video Demonstration
 
 [![jros2 Cellphone Sensor Bridge Demo](https://img.youtube.com/vi/skNQdbO8yrw/maxresdefault.jpg)](https://www.youtube.com/watch?v=skNQdbO8yrw)
@@ -10,14 +14,15 @@ Android (Jetpack Compose) application that exports live phone sensor telemetry t
 
 ## Table of Contents
 1. [What This Project Does](#what-this-project-does)
-2. [Latest Release](#latest-release)
-3. [Sensor Mapping & File Registry](#sensor-mapping--file-registry)
-4. [Prerequisites & Build Instructions](#prerequisites--build-instructions)
-5. [Permissions Requirements](#permissions-requirements)
-6. [Architecture & How It Works](#architecture--how-it-works)
-7. [Project Directory Layout](#project-directory-layout)
-8. [Step-by-Step Guide: Adding a New Sensor](#step-by-step-guide-adding-a-new-sensor)
-9. [Verification from ROS 2](#verification-from-ros-2)
+2. [Related Repositories](#related-repositories)
+3. [Latest Release](#latest-release)
+4. [Sensor Mapping & File Registry](#sensor-mapping--file-registry)
+5. [Prerequisites & Build Instructions](#prerequisites--build-instructions)
+6. [Permissions Requirements](#permissions-requirements)
+7. [Architecture & How It Works](#architecture--how-it-works)
+8. [Project Directory Layout](#project-directory-layout)
+9. [Step-by-Step Guide: Adding a New Sensor](#step-by-step-guide-adding-a-new-sensor)
+10. [Verification from ROS 2](#verification-from-ros-2)
 
 ---
 
@@ -27,6 +32,15 @@ Android (Jetpack Compose) application that exports live phone sensor telemetry t
 - Streams real-time, high-frequency telemetry from **11+ hardware/software sensors and input devices** on the phone to external ROS 2 environments.
 - Features a premium, reactive, dark-themed sensor dashboard UI using Jetpack Compose.
 - Employs an Android multicast Wi-Fi lock to ensure robust, real-time discovery of DDS participants.
+
+---
+
+## Related Repositories
+
+- [Official IHMC jros2](https://github.com/ihmcrobotics/jros2): Upstream ROS 2 Java/Kotlin bridge project that this work builds upon conceptually.
+- [SinfonIAUniandes jros2 fork](https://github.com/SinfonIAUniandes/jros2): Fork used by this project to obtain Kotlin-compatible Android integration and the required bridge behavior.
+- [mobile_sensor_msgs](https://github.com/SinfonIAUniandes/mobile_sensor_msgs): Custom ROS 2 message package used for mobile-specific telemetry such as touch and biometric data.
+- [mobile_to_joy](https://github.com/SinfonIAUniandes/mobile_to_joy): Companion ROS 2 node that converts tactile touch interactions into controller-style input.
 
 ---
 
@@ -81,13 +95,15 @@ The camera bridge supports front, back, or dual streaming depending on the devic
 
 ## Prerequisites & Build Instructions
 
-This application relies heavily on the `us.ihmc:jros2-android` AAR dependency, which provides the Fast-DDS native JNI libraries. 
+This application relies heavily on the `us.ihmc:jros2-android` AAR dependency, which provides the Fast-DDS native JNI libraries.
+
+For this project, the Android artifact should be produced from the [SinfonIAUniandes jros2 fork](https://github.com/SinfonIAUniandes/jros2), not only from [the official IHMC repository](https://github.com/ihmcrobotics/jros2), because the fork is the variant used here for Kotlin compatibility and integration with `mobile_sensor_msgs`.
 
 ### 1) Compile and Publish `jros2`
 
 Before building this app, you must compile the native C++ libraries and publish the Android AAR to your local Maven repository. 
 
-**Please refer to the "Compiling from Source" section in the jros2 for detailed instructions on compiling the native layer.**
+**Please refer to the "Compiling from Source" section in the jros2 repository for detailed instructions on compiling the native layer.**
 
 Once compiled, ensure the Android artifact is published:
 ```powershell
@@ -307,3 +323,5 @@ ros2 topic hz /phone/imu
 # Inspect GPS status
 ros2 topic echo /phone/gps
 ```
+
+As a follow-up companion experiment, [mobile_to_joy](https://github.com/SinfonIAUniandes/mobile_to_joy) was developed as a proof of concept to transform phone tactile interactions into controller-like ROS 2 input.
